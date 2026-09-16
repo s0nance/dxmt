@@ -150,7 +150,14 @@ struct TessMeshWorkload {
 
 int
 get_next_index(threadgroup int *out_count) {
-  return __metal_atomic_fetch_add_explicit(out_count, 1, int(memory_order_relaxed), __METAL_MEMORY_SCOPE_THREADGROUP__);
+  /* iOS-Madeira 2026-09-16: the Metal toolchain shipped with Xcode 27
+   * (MetalToolchain-v27.1.266.1) takes a fifth memory-flags argument here.
+   * __METAL_MEMORY_FLAGS_NONE__ is what Metal's own <metal_atomic> passes on
+   * the overload that takes no flags, so this keeps the original semantics
+   * rather than inventing any. Without it: "too few arguments to function
+   * call, expected 5, have 4". */
+  return __metal_atomic_fetch_add_explicit(out_count, 1, int(memory_order_relaxed), __METAL_MEMORY_SCOPE_THREADGROUP__,
+                                           __METAL_MEMORY_FLAGS_NONE__);
 }
 
 template <partitioning partition>
