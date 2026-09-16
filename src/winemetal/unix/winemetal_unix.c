@@ -122,7 +122,32 @@ _MTLCopyAllDevices(void *obj) {
     params->ret = (wmtr_call(RM_OP_COPY_ALL_DEVICES, 0, 0, &r, sizeof r, 0) == RM_OK) ? r.handle : 0;
     return STATUS_SUCCESS;
   }
-  params->ret = (obj_handle_t)MTLCopyAllDevices();
+  /* iOS-Madeira 2026-09-16: MTLCopyAllDevices only exists from iOS 18.0
+   * (API_AVAILABLE(macos(10.11), macCatalyst(13.0), ios(18.0))). It was the
+   * ONLY thing in DXMT's unix side keeping this build at
+   * -miphoneos-version-min=18.0 -- every other translation unit compiles
+   * clean at 17.0 -- and the app itself targets 17.0, which is where the
+   * "built for newer iOS version" link warnings came from.
+   *
+   * The fallback is not a downgrade. An iPhone has exactly one GPU, so
+   * enumerating devices is meaningless there; MTLCopyAllDevices reached iOS
+   * 18 for Mac parity. MTLCreateSystemDefaultDevice is the canonical iOS
+   * API for this and returns that one device.
+   *
+   * Memory semantics are preserved deliberately: MTLCopyAllDevices is
+   * NS_RETURNS_RETAINED, so the caller owns the array. This file is built
+   * without ARC, and MTLCreateSystemDefaultDevice is itself
+   * NS_RETURNS_RETAINED, so the device reference we own is released after
+   * the array takes its own -- returning an owned array and leaking
+   * nothing. */
+  if (__builtin_available(iOS 18.0, *)) {
+    params->ret = (obj_handle_t)MTLCopyAllDevices();
+  } else {
+    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
+    NSArray *arr = dev ? [[NSArray alloc] initWithObjects:dev, nil] : nil;
+    [dev release];
+    params->ret = (obj_handle_t)arr;
+  }
   return STATUS_SUCCESS;
 }
 
